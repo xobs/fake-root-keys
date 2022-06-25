@@ -213,18 +213,16 @@ dependencies = [
  "blowfish",
  "byteorder",
  "cipher 0.4.3",
- "digest 0.9.0",
  "ed25519-dalek",
  "hex",
- "jtag",
  "log",
  "num-derive",
  "num-traits",
  "rkyv",
  "sha2 0.10.2",
- "ticktimer-server",
  "utralib",
- "xous 0.9.8",
+ "xous 0.9.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.7",
  "xous-names",
  "zeroize",
 ]
@@ -270,23 +268,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "jtag"
-version = "0.1.0"
-dependencies = [
- "log",
- "log-server",
- "num-derive",
- "num-traits",
- "rkyv",
- "susres",
- "ticktimer-server",
- "utralib",
- "xous 0.9.8",
- "xous-ipc",
- "xous-names",
-]
-
-[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -316,7 +297,7 @@ dependencies = [
  "num-traits",
  "utralib",
  "xous 0.9.8",
- "xous-ipc",
+ "xous-ipc 0.9.7",
 ]
 
 [[package]]
@@ -514,21 +495,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6bdef32e8150c2a081110b42772ffe7d7c9032b606bc226c8260fd97e0976601"
 
 [[package]]
-name = "susres"
-version = "0.1.0"
-dependencies = [
- "log",
- "log-server",
- "num-derive",
- "num-traits",
- "rkyv",
- "utralib",
- "xous 0.9.8",
- "xous-ipc",
- "xous-names",
-]
-
-[[package]]
 name = "svd2utra"
 version = "0.1.0"
 dependencies = [
@@ -568,22 +534,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d326610f408c7a4eb6f51c37c330e496b08506c9457c9d34287ecc38809fb060"
 dependencies = [
  "unicode-width",
-]
-
-[[package]]
-name = "ticktimer-server"
-version = "0.1.0"
-dependencies = [
- "log",
- "log-server",
- "num-derive",
- "num-traits",
- "rkyv",
- "susres",
- "utralib",
- "xous 0.9.8",
- "xous-ipc",
- "xous-names",
 ]
 
 [[package]]
@@ -677,17 +627,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "xous-ipc"
+version = "0.9.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9874c4b4dcce5c8fe73351e0bb27e08cc1bf5b58ce621a4c42d1a5cb8869bd87"
+dependencies = [
+ "bitflags",
+ "rkyv",
+ "xous 0.9.8 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "xous-names"
 version = "0.9.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "024a7c3479b9cc1198dfeb9b3a09829fbb6a41f6761ef1c495a75898dba58877"
 dependencies = [
  "log",
- "log-server",
  "num-derive",
  "num-traits",
  "rkyv",
- "utralib",
- "xous 0.9.8",
- "xous-ipc",
+ "xous 0.9.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.7 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

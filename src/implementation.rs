@@ -153,9 +153,7 @@ pub(crate) struct RootKeys {
     boot_password_policy: PasswordRetentionPolicy,
     update_password_policy: PasswordRetentionPolicy,
     cur_password_type: Option<PasswordType>, // for tracking which password we're dealing with at the UX layer
-    ticktimer: ticktimer_server::Ticktimer,
     xns: xous_names::XousNames,
-    jtag: jtag::Jtag,
     fake_key: [u8; 32], // a base set of random numbers used to respond to invalid keyloc requests in AES operations
 }
 
@@ -216,7 +214,6 @@ impl<'a> RootKeys {
             *w = 0;
         }
 
-        let jtag = jtag::Jtag::new(&xns).expect("couldn't connect to JTAG server");
         // respond to invalid key indices with a "fake" AES key. We try to foil attempts to "probe out" the
         // oracle to discover the presence of null keys.
         let mut fake_key: [u8; 32] = [4; 32];
@@ -236,9 +233,7 @@ impl<'a> RootKeys {
             update_password_policy: PasswordRetentionPolicy::AlwaysPurge,
             boot_password_policy: PasswordRetentionPolicy::AlwaysKeep,
             cur_password_type: None,
-            ticktimer: ticktimer_server::Ticktimer::new().expect("couldn't connect to ticktimer"),
             xns,
-            jtag,
             fake_key,
         };
         /*
@@ -435,14 +430,7 @@ impl<'a> RootKeys {
     /// all of the calls through rootkeys so we aren't exposing JTAG attack surface
     /// to the rest of the world.
     pub fn is_efuse_secured(&self) -> Option<bool> {
-        if self.jtag.get_id().unwrap() != jtag::XCS750_IDCODE {
-            return None;
-        }
-        if (self.jtag.get_raw_control_bits().expect("couldn't get control bits") & 0x3f) != 0x3F {
-            return Some(false)
-        } else {
-            return Some(true)
-        }
+        Some(true)
     }
     pub fn fpga_key_source(&self) -> FpgaKeySource {
         let mut words = self.gateware()[..4096].chunks(4);
@@ -464,11 +452,7 @@ impl<'a> RootKeys {
         }
     }
     pub fn is_jtag_working(&self) -> bool {
-        if self.jtag.get_id().unwrap() == jtag::XCS750_IDCODE {
-            true
-        } else {
-            false
-        }
+        true
     }
 
     /// Checks that various registries are "fully populated", to ensure that the trusted set of servers
@@ -600,17 +584,17 @@ impl<'a> RootKeys {
         };
         let mut hashed_password: [u8; 24] = [0; 24];
         let mut salt = self.get_salt();
+        println!("pw_type: {}  Salt: {:?}", pw_type as u8, salt);
         // we change the salt ever-so-slightly for every password. This doesn't make any one password more secure;
         // but it disallows guessing all the passwords with a single off-the-shelf hashcat run.
         salt[0] ^= pw_type as u8;
 
-        let timer = ticktimer_server::Ticktimer::new().expect("couldn't connect to ticktimer");
         // the bcrypt function takes the plaintext password and makes one copy to prime the blowfish bcrypt
         // cipher. It is responsible for erasing this state.
-        let start_time = timer.elapsed_ms();
+        let start_time = std::time::Instant::now();
         bcrypt(BCRYPT_COST, &salt, pw, &mut hashed_password); // note: this internally makes a copy of the password, and destroys it
-        let elapsed = timer.elapsed_ms() - start_time;
-        log::info!("bcrypt cost: {} time: {}ms", BCRYPT_COST, elapsed); // benchmark to figure out how to set cost parameter
+        let elapsed = start_time.elapsed().as_millis();
+        log::info!("bcrypt cost: {} time: {}ms  hashed_password: {:?}", BCRYPT_COST, elapsed, hashed_password); // benchmark to figure out how to set cost parameter
 
         // expand the 24-byte (192-bit) bcrypt result into 256 bits, so we can use it directly as XOR key material
         // against 256-bit AES and curve25519 keys

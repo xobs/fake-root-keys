@@ -3,11 +3,13 @@
 
 mod api;
 use api::*;
-use xous::{msg_blocking_scalar_unpack};
+use xous::msg_blocking_scalar_unpack;
 
 use num_traits::*;
 
 use std::str;
+
+mod other_fake_servers;
 
 #[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation;
@@ -66,13 +68,42 @@ pub struct MetadataInFlash {
     pub status_str: [u8; 1024],
 }
 
+struct XousLogger;
+static XOUS_LOGGER: XousLogger = XousLogger {};
+
+impl log::Log for XousLogger {
+    fn enabled(&self, _metadata: &log::Metadata) -> bool {
+        true
+    }
+
+    fn log(&self, record: &log::Record) {
+        println!(
+            "{}:{}: {} ({}:{})",
+            record.level(),
+            record.target(),
+            record.args(),
+            record.file().unwrap_or("unknown"),
+            record.line().unwrap_or(0)
+        );
+    }
+
+    fn flush(&self) {}
+}
+
 fn main() -> ! {
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     use crate::implementation::RootKeys;
 
+    log::set_logger(&XOUS_LOGGER).unwrap();
     log::set_max_level(log::LevelFilter::Trace);
     log::info!("my PID is {}", xous::process::id());
 
+    other_fake_servers::start();
+
+    run_fake_root_keys();
+}
+
+fn run_fake_root_keys() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     /*
        Connections allowed to the keys server:
@@ -89,9 +120,6 @@ fn main() -> ! {
     let mut keys = RootKeys::new();
     log::info!("Boot FPGA key source: {:?}", keys.fpga_key_source());
 
-    // create the servers necessary to coordinate an auto-reboot sequence...
-    let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
-
     log::trace!("ready to accept requests");
 
     // register a suspend/resume listener
@@ -101,17 +129,18 @@ fn main() -> ! {
     let mut aes_sender: Option<xous::MessageSender> = None;
     loop {
         let mut msg = xous::receive_message(keys_sid).unwrap();
-        log::debug!("message: {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
-            Some(Opcode::SuspendResume) => {}
-            Some(Opcode::KeysInitialized) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+        let opcode = FromPrimitive::from_usize(msg.body.id()).unwrap_or(Opcode::InvalidOpcode);
+        log::debug!("fake rootkeys message: opcode {:#?} {:x?}", opcode, msg.body);
+        match opcode {
+            Opcode::SuspendResume => {}
+            Opcode::KeysInitialized => {
                 if keys.is_initialized() {
                     xous::return_scalar(msg.sender, 1).unwrap();
                 } else {
                     xous::return_scalar(msg.sender, 0).unwrap();
                 }
-            }),
-            Some(Opcode::IsEfuseSecured) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+            }
+            Opcode::IsEfuseSecured => {
                 if let Some(secured) = keys.is_efuse_secured() {
                     if secured {
                         xous::return_scalar(msg.sender, 1).unwrap();
@@ -121,15 +150,15 @@ fn main() -> ! {
                 } else {
                     xous::return_scalar(msg.sender, 2).unwrap();
                 }
-            }),
-            Some(Opcode::IsJtagWorking) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+            }
+            Opcode::IsJtagWorking => {
                 if keys.is_jtag_working() {
                     xous::return_scalar(msg.sender, 1).unwrap();
                 } else {
                     xous::return_scalar(msg.sender, 0).unwrap();
                 }
-            }),
-            Some(Opcode::ClearPasswordCacheEntry) => {
+            }
+            Opcode::ClearPasswordCacheEntry => {
                 msg_blocking_scalar_unpack!(msg, pass_type_code, _, _, _, {
                     let pass_type: AesRootkeyType = FromPrimitive::from_usize(pass_type_code)
                         .unwrap_or(AesRootkeyType::NoneSpecified);
@@ -139,8 +168,8 @@ fn main() -> ! {
             }
 
             // UX flow opcodes
-            Some(Opcode::UxTryInitKeys) => unimplemented!(),
-            Some(Opcode::UxInitBootPasswordReturn) => {
+            Opcode::UxTryInitKeys => unimplemented!(),
+            Opcode::UxInitBootPasswordReturn => {
                 // // assume:
                 // //   - setup_key_init has also been called (exactly once, before anything happens)
                 // //   - set_ux_password_type has been called already
@@ -172,7 +201,7 @@ fn main() -> ! {
                 // log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                 // rootkeys_modal.activate();
             }
-            Some(Opcode::InitBootPassword) => {
+            Opcode::InitBootPassword => {
                 // Only operate on memory messages
                 if !msg.body.has_memory() {
                     if msg.body.is_blocking() {
@@ -193,9 +222,11 @@ fn main() -> ! {
                         Ok(o) => o,
                     }
                 };
+                println!(">>> Using return password: \"{}\"", s);
                 keys.hash_and_save_password(s);
+                keys.update_policy(Some(PasswordRetentionPolicy::EraseOnSuspend));
             }
-            Some(Opcode::UxInitUpdatePasswordReturn) => {
+            Opcode::UxInitUpdatePasswordReturn => {
                 // let mut buf =
                 //     unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 // let plaintext_pw = buf
@@ -259,16 +290,16 @@ fn main() -> ! {
                 //     }
                 // }
             }
-            Some(Opcode::UxTryReboot) => {
+            Opcode::UxTryReboot => {
                 unimplemented!()
             }
-            Some(Opcode::UxDoReboot) => {
+            Opcode::UxDoReboot => {
                 unimplemented!()
             }
-            Some(Opcode::UxUpdateGateware) => {
+            Opcode::UxUpdateGateware => {
                 unimplemented!()
             }
-            Some(Opcode::UxUpdateGwPasswordReturn) => {
+            Opcode::UxUpdateGwPasswordReturn => {
                 // let mut buf =
                 //     unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 // let plaintext_pw = buf
@@ -286,77 +317,69 @@ fn main() -> ! {
                 //     .map(|_| ())
                 //     .expect("couldn't send action message");
             }
-            Some(Opcode::UxUpdateGwRun) => {
+            Opcode::UxUpdateGwRun => {
                 unimplemented!()
             }
-            Some(Opcode::UxSelfSignXous) => {
+            Opcode::UxSelfSignXous => {
                 unimplemented!()
             }
-            Some(Opcode::UxSignXousPasswordReturn) => {
+            Opcode::UxSignXousPasswordReturn => {
                 unimplemented!()
             }
-            Some(Opcode::UxSignXousRun) => {
+            Opcode::UxSignXousRun => {
                 unimplemented!()
             }
-            Some(Opcode::UxAesEnsurePassword) => {
-                // msg_blocking_scalar_unpack!(msg, key_index, _, _, _, {
-                //     if key_index as u8 == AesRootkeyType::User0.to_u8().unwrap() {
-                //         if keys.is_pcache_boot_password_valid() {
-                //             // short circuit the process if the cache is hot
-                //             xous::return_scalar(msg.sender, 1).unwrap();
-                //             continue;
-                //         }
-                //         if aes_sender.is_some() {
-                //             log::error!(
-                //                 "multiple concurrent requests to UxAesEnsurePasword, not allowed!"
-                //             );
-                //             xous::return_scalar(msg.sender, 0).unwrap();
-                //         } else {
-                //             aes_sender = Some(msg.sender);
-                //         }
-                //         keys.set_ux_password_type(Some(PasswordType::Boot));
-                //         //password_action.set_action_opcode(Opcode::UxAesPasswordPolicy.to_u32().unwrap()); // skip policy question. it's annoying.
-                //         password_action
-                //             .set_action_opcode(Opcode::UxAesEnsureReturn.to_u32().unwrap());
-                //         rootkeys_modal.modify(
-                //             Some(ActionType::TextEntry(password_action.clone())),
-                //             Some(t!("rootkeys.get_login_password", xous::LANG)),
-                //             false,
-                //             None,
-                //             true,
-                //             None,
-                //         );
-                //         #[cfg(feature = "tts")]
-                //         tts.tts_blocking(t!("rootkeys.get_login_password", xous::LANG))
-                //             .unwrap();
-                //         log::info!(
-                //             "{}ROOTKEY.BOOTPW,{}",
-                //             xous::BOOKEND_START,
-                //             xous::BOOKEND_END
-                //         );
-                //         rootkeys_modal.activate();
-                //         // note that the scalar is *not* yet returned, it will be returned by the opcode called by the password assurance
-                //     } else {
-                //         // insert other indices, as we come to have them in else-ifs
-                //         // note that there needs to be a way to keep the ensured password in sync with the
-                //         // actual key index (if multiple passwords are used/required). For now, because there is only
-                //         // one password, we can use is_pcache_boot_password_valid() to sync that up; but as we add
-                //         // more keys with more passwords, this policy may need to become markedly more complicated!
+            Opcode::UxAesEnsurePassword => {
+                msg_blocking_scalar_unpack!(msg, key_index, _, _, _, {
+                    if key_index as u8 == AesRootkeyType::User0.to_u8().unwrap() {
+                        if keys.is_pcache_boot_password_valid() {
+                            // short circuit the process if the cache is hot
+                            log::info!("Boot password already valid");
+                            xous::return_scalar(msg.sender, 1).unwrap();
+                            continue;
+                        }
+                        if aes_sender.is_some() {
+                            log::error!(
+                                "multiple concurrent requests to UxAesEnsurePasword, not allowed!"
+                            );
+                            xous::return_scalar(msg.sender, 0).unwrap();
+                        } else {
+                            aes_sender = Some(msg.sender);
+                        }
+                        keys.set_ux_password_type(Some(PasswordType::Boot));
+                        log::info!("Asking the user for their boot password");
+                        // //password_action.set_action_opcode(Opcode::UxAesPasswordPolicy.to_u32().unwrap()); // skip policy question. it's annoying.
+                        // password_action
+                        //     .set_action_opcode(Opcode::UxAesEnsureReturn.to_u32().unwrap());
+                        // rootkeys_modal.modify(
+                        //     Some(ActionType::TextEntry(password_action.clone())),
+                        //     Some(t!("rootkeys.get_login_password", xous::LANG)),
+                        //     false,
+                        //     None,
+                        //     true,
+                        //     None,
+                        // );
+                        log::info!(
+                            "{}ROOTKEY.BOOTPW,{}",
+                            xous::BOOKEND_START,
+                            xous::BOOKEND_END
+                        );
+                        // rootkeys_modal.activate();
+                        // note that the scalar is *not* yet returned, it will be returned by the opcode called by the password assurance
+                    } else {
+                        // insert other indices, as we come to have them in else-ifs
+                        // note that there needs to be a way to keep the ensured password in sync with the
+                        // actual key index (if multiple passwords are used/required). For now, because there is only
+                        // one password, we can use is_pcache_boot_password_valid() to sync that up; but as we add
+                        // more keys with more passwords, this policy may need to become markedly more complicated!
 
-                //         // otherwise, an invalid password request
-                //         modals
-                //             .get()
-                //             .show_notification(
-                //                 t!("rootkeys.bad_password_request", xous::LANG),
-                //                 None,
-                //             )
-                //             .expect("modals error");
-
-                //         xous::return_scalar(msg.sender, 0).unwrap();
-                //     }
-                // })
+                        // otherwise, an invalid password request
+                        log::error!("bad_password_request");
+                        xous::return_scalar(msg.sender, 0).unwrap();
+                    }
+                })
             }
-            Some(Opcode::UxAesPasswordPolicy) => {
+            Opcode::UxAesPasswordPolicy => {
                 // // this is bypassed, it's not useful. You basically always only want to retain the password until sleep.
                 // let mut buf =
                 //     unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -389,7 +412,7 @@ fn main() -> ! {
                 //     .unwrap();
                 // rootkeys_modal.activate();
             }
-            Some(Opcode::UxAesEnsureReturn) => {
+            Opcode::UxAesEnsureReturn => {
                 // if let Some(sender) = aes_sender.take() {
                 //     xous::return_scalar(sender, 1).unwrap();
                 //     {
@@ -413,7 +436,7 @@ fn main() -> ! {
                 //     log::warn!("UxAesEnsureReturn detected a fat-finger event. Ignoring.");
                 // }
             }
-            Some(Opcode::AesOracle) => {
+            Opcode::AesOracle => {
                 // let mut buffer = unsafe {
                 //     Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
                 // };
@@ -437,52 +460,53 @@ fn main() -> ! {
                 // };
                 // buffer.replace(aes_op).unwrap();
             }
-            Some(Opcode::AesKwp) => {
-                // let mut buffer = unsafe {
-                //     Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                // };
-                // let mut kwp = buffer.to_original::<KeyWrapper, _>().unwrap();
-                // keys.kwp_op(&mut kwp);
-                // buffer.replace(kwp).unwrap();
+            Opcode::AesKwp => {
+                let mut buffer = unsafe {
+                    xous_ipc::Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+                };
+                let mut kwp = buffer.to_original::<KeyWrapper, _>().unwrap();
+                // println!("kwp: {:?}", kwp);
+                keys.kwp_op(&mut kwp);
+                buffer.replace(kwp).unwrap();
             }
 
-            Some(Opcode::BbramProvision) => {
+            Opcode::BbramProvision => {
                 unimplemented!()
             }
-            Some(Opcode::UxBbramCheckReturn) => {
+            Opcode::UxBbramCheckReturn => {
                 unimplemented!()
             }
-            Some(Opcode::UxBbramPasswordReturn) => {
+            Opcode::UxBbramPasswordReturn => {
                 unimplemented!()
             }
-            Some(Opcode::UxBbramRun) => {
+            Opcode::UxBbramRun => {
                 unimplemented!()
             }
 
-            Some(Opcode::CheckGatewareSignature) => {
+            Opcode::CheckGatewareSignature => {
                 msg_blocking_scalar_unpack!(msg, _, _, _, _, { unimplemented!() })
             }
-            Some(Opcode::TestUx) => msg_blocking_scalar_unpack!(msg, _arg, _, _, _, {
+            Opcode::TestUx => msg_blocking_scalar_unpack!(msg, _arg, _, _, _, {
                 // dummy test for now
                 xous::return_scalar(msg.sender, 1234).unwrap();
             }),
-            Some(Opcode::UxGutter) => {
+            Opcode::UxGutter => {
                 // an intentional NOP for UX actions that require a destintation but need no action
             }
 
             // boilerplate Ux handlers
-            Some(Opcode::ModalRedraw) => {
+            Opcode::ModalRedraw => {
                 unimplemented!()
             }
-            Some(Opcode::ModalKeys) => unimplemented!(),
-            Some(Opcode::ModalDrop) => {
+            Opcode::ModalKeys => unimplemented!(),
+            Opcode::ModalDrop => {
                 panic!("Password modal for rootkeys quit unexpectedly")
             }
-            Some(Opcode::Quit) => {
+            Opcode::Quit => {
                 log::warn!("password thread received quit, exiting.");
                 break;
             }
-            None => {
+            Opcode::InvalidOpcode => {
                 log::error!("couldn't convert opcode");
             }
         }

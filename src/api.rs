@@ -3,6 +3,7 @@ pub(crate) const SERVER_NAME_KEYS: &str     = "_Root key server and update manag
 pub(crate) const SIG_VERSION: u32 = 1;
 
 #[allow(dead_code)]
+#[repr(usize)]
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
     /// use to check if we've been initialized
@@ -70,6 +71,9 @@ pub(crate) enum Opcode {
 
     /// Initialize the root password without involving Ux
     InitBootPassword = 34,
+
+    /// Invalid
+    InvalidOpcode = usize::MAX,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, Eq)]
