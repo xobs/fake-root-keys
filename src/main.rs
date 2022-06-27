@@ -1,6 +1,8 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
+pub(crate) const SERVER_NAME_SPINOR: &str = "_SPINOR Hardware Interface Server_";
+
 mod api;
 use api::*;
 use xous::msg_blocking_scalar_unpack;
@@ -120,6 +122,18 @@ fn run_fake_root_keys() -> ! {
     let mut keys = RootKeys::new();
     log::info!("Boot FPGA key source: {:?}", keys.fpga_key_source());
 
+    // Register a fake SoC token. This is required in order to allow the spinor server
+    // to write to flash.
+    let spinor_connection = xns
+        .request_connection_blocking(SERVER_NAME_SPINOR)
+        .expect("Can't connect to Spinor server");
+    xous::send_message(
+        spinor_connection,
+        xous::Message::new_scalar(2 /* RegisterSocToken */, 1, 2, 3, 4),
+    )
+    .expect("couldn't register fake token");
+    log::trace!("registered fake soc token with spinor server");
+
     log::trace!("ready to accept requests");
 
     // register a suspend/resume listener
@@ -130,7 +144,11 @@ fn run_fake_root_keys() -> ! {
     loop {
         let mut msg = xous::receive_message(keys_sid).unwrap();
         let opcode = FromPrimitive::from_usize(msg.body.id()).unwrap_or(Opcode::InvalidOpcode);
-        log::debug!("fake rootkeys message: opcode {:#?} {:x?}", opcode, msg.body);
+        log::debug!(
+            "fake rootkeys message: opcode {:#?} {:x?}",
+            opcode,
+            msg.body
+        );
         match opcode {
             Opcode::SuspendResume => {}
             Opcode::KeysInitialized => {
@@ -462,7 +480,9 @@ fn run_fake_root_keys() -> ! {
             }
             Opcode::AesKwp => {
                 let mut buffer = unsafe {
-                    xous_ipc::Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+                    xous_ipc::Buffer::from_memory_message_mut(
+                        msg.body.memory_message_mut().unwrap(),
+                    )
                 };
                 let mut kwp = buffer.to_original::<KeyWrapper, _>().unwrap();
                 // println!("kwp: {:?}", kwp);
