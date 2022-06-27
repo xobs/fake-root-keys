@@ -16,10 +16,9 @@
 ///
 /// This is a NIST-blessed construction. Other than that, AES Key Wrap is inefficient
 /// and is generally not very useful.
-
 use aes::cipher::generic_array::GenericArray;
-use aes::Aes256;
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
+use aes::Aes256;
 use byteorder::{BigEndian, ByteOrder};
 
 use crate::api::KeywrapError;

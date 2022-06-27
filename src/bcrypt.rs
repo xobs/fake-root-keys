@@ -1,4 +1,3 @@
-
 // this code is based on https://github.com/Keats/rust-bcrypt
 // the original crate is not used directly because the base64 wrappers cause the crate
 // to be incompatible with a no-std environment. We are storing binary data directly
@@ -30,7 +29,10 @@ pub fn bcrypt(cost: u32, salt: &[u8], pw: &str, output: &mut [u8]) {
     assert!(output.len() == 24);
 
     let pw_len = if pw.len() > 72 {
-        log::warn!("password of length {} is truncated to 72 bytes [reason: bcrypt limitation]", pw.len());
+        log::warn!(
+            "password of length {} is truncated to 72 bytes [reason: bcrypt limitation]",
+            pw.len()
+        );
         72
     } else {
         pw.len() + 1
@@ -51,7 +53,9 @@ pub fn bcrypt(cost: u32, salt: &[u8], pw: &str, output: &mut [u8]) {
     // and these writes are never read, and therefore they may be optimized out.
     let pt_ptr = plaintext_copy.as_mut_ptr();
     for i in 0..plaintext_copy.len() {
-        unsafe{pt_ptr.add(i).write_volatile(core::mem::zeroed());}
+        unsafe {
+            pt_ptr.add(i).write_volatile(core::mem::zeroed());
+        }
     }
     core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 

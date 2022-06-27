@@ -1,4 +1,4 @@
-pub(crate) const SERVER_NAME_KEYS: &str     = "_Root key server and update manager_";
+pub(crate) const SERVER_NAME_KEYS: &str = "_Root key server and update manager_";
 #[allow(dead_code)]
 pub(crate) const SIG_VERSION: u32 = 1;
 
@@ -91,19 +91,10 @@ pub enum PasswordRetentionPolicy {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum PasswordType {
     Boot = 1,
-    Update = 2,
-}
-#[cfg_attr(not(any(target_os = "none", target_os = "xous")), allow(dead_code))]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum RootkeyResult {
-    AlignmentError = 0,
-    KeyError = 1,
-    IntegrityError = 2,
-    FlashError = 3,
 }
 
 /// AES operation definitions
-pub use cipher::{BlockCipher, consts::U16};
+pub use cipher::{consts::U16, BlockCipher};
 use zeroize::Zeroize;
 
 /// 128-bit AES block
@@ -162,7 +153,9 @@ impl AesOp {
     }
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize, Eq, PartialEq, Copy, Clone)]
+#[derive(
+    Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize, Eq, PartialEq, Copy, Clone,
+)]
 pub enum KeywrapError {
     /// Input is too big.
     TooBig = 0,
@@ -200,7 +193,7 @@ impl fmt::Display for KeywrapError {
 pub(crate) const MAX_WRAP_DATA: usize = 2048;
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize)]
 #[zeroize(drop)]
-pub (crate) struct KeyWrapper {
+pub(crate) struct KeyWrapper {
     pub data: [u8; MAX_WRAP_DATA + 8],
     // used to specify the length of the data used in the fixed-length array above
     pub len: u32,

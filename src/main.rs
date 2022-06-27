@@ -17,8 +17,6 @@ mod other_fake_servers;
 mod implementation;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 use implementation::*;
-/// used by the bbram helper/console protocol to indicate the start of a console message
-const CONSOLE_SENTINEL: &'static str = "CONS_SENTINEL|";
 
 #[cfg(any(target_os = "none", target_os = "xous"))]
 mod bcrypt;
@@ -136,10 +134,6 @@ fn run_fake_root_keys() -> ! {
 
     log::trace!("ready to accept requests");
 
-    // register a suspend/resume listener
-    let main_cid = xous::connect(keys_sid).expect("couldn't create suspend callback connection");
-
-    let mut reboot_initiated = false;
     let mut aes_sender: Option<xous::MessageSender> = None;
     loop {
         let mut msg = xous::receive_message(keys_sid).unwrap();
