@@ -91,9 +91,6 @@ impl log::Log for XousLogger {
 }
 
 fn main() -> ! {
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
-    use crate::implementation::RootKeys;
-
     log::set_logger(&XOUS_LOGGER).unwrap();
     log::set_max_level(log::LevelFilter::Trace);
     log::info!("my PID is {}", xous::process::id());

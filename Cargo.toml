@@ -7,11 +7,11 @@ description = "Xous root keys server"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "*"
-xous-names = "*"
+xous = "0.9.8"
+xous-names = "0.9.7"
 log = "0.4.14"
 
-xous-ipc = { path = "../Core/xous-ipc"}
+xous-ipc = "0.9.7"
 
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
@@ -21,18 +21,15 @@ zeroize = { version = "1.5.5", features = [ "derive" ] }
 # bcrypt
 cipher = "0.4.3"
 blowfish = { version = "0.8.0", features = ["bcrypt"] }
-
+byteorder = "1.4.3" # used by keywrap
 sha2 = "0.10"
 
 # private keys
 aes = {path="../Core/services/aes"}
-byteorder = "1.4.3" # used by keywrap
-# hardware acceleration adaptations are inserted into a fork of the main branch.
-hex = {version = "0.4.3", default-features = false, features = []}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../Core/utralib"}
 
 [features]
 hazardous-debug = []  # this feature enables the printing of secret materials for debug purposes
-default = ["hazardous-debug"]
+default = []
