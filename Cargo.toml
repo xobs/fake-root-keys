@@ -7,11 +7,12 @@ description = "Xous root keys server"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.8"
-xous-names = "0.9.7"
+xous = "0.9.23"
+xous-names = { package = "xous-api-names", version = "0.9.18" }
 log = "0.4.14"
 
-xous-ipc = "0.9.7"
+xous-ipc = "0.9.23"
+aes-kw = {version = "0.2.1", features = ["alloc"]}
 
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
@@ -27,9 +28,9 @@ sha2 = "0.10"
 # private keys
 aes = {path="../Core/services/aes"}
 
-[target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = { path = "../Core/utralib"}
+utralib = { version = "0.1.9", optional = true, default-features = false }
 
 [features]
+renode = ["utralib/renode"]
 hazardous-debug = []  # this feature enables the printing of secret materials for debug purposes
-default = []
+default = ["renode"]

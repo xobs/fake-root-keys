@@ -44,7 +44,7 @@ impl Aes256KeyWrap {
         if input.len() > std::u32::MAX as usize
             || input.len() as u64 >= std::u64::MAX / FEISTEL_ROUNDS as u64
         {
-            return Err(KeywrapError::TooBig);
+            return Err(KeywrapError::InvalidDataSize);
         }
         let mut aiv: [u8; 8] = [0xa6u8, 0x59, 0x59, 0xa6, 0, 0, 0, 0];
         BigEndian::write_u32(&mut aiv[4..8], input.len() as u32);
@@ -83,19 +83,19 @@ impl Aes256KeyWrap {
 
     pub fn decapsulate(&self, input: &[u8], expected_len: usize) -> Result<Vec<u8>, KeywrapError> {
         if input.len() % 8 != 0 {
-            return Err(KeywrapError::Unpadded);
+            return Err(KeywrapError::InvalidDataSize);
         }
         let output_len = input
             .len()
             .checked_sub(Self::MAC_BYTES)
-            .ok_or(KeywrapError::TooSmall)?;
+            .ok_or(KeywrapError::InvalidOutputSize)?;
         if output_len > std::u32::MAX as usize
             || output_len as u64 >= std::u64::MAX / FEISTEL_ROUNDS as u64
         {
-            return Err(KeywrapError::TooBig);
+            return Err(KeywrapError::InvalidDataSize);
         }
         if expected_len > output_len || (expected_len & !7) > output_len {
-            return Err(KeywrapError::InvalidExpectedLen);
+            return Err(KeywrapError::InvalidDataSize);
         }
         let mut output = vec![0u8; output_len];
         let mut aiv: [u8; 8] = [0xa6u8, 0x59, 0x59, 0xa6, 0, 0, 0, 0];
@@ -112,7 +112,7 @@ impl Aes256KeyWrap {
                 .zip(aiv.iter())
                 .fold(0, |acc, (a, b)| acc | (a ^ b));
             if c != 0 {
-                return Err(KeywrapError::AuthenticationFailed);
+                return Err(KeywrapError::IntegrityCheckFailed);
             }
             output[0..8].copy_from_slice(&block[8..16]);
             return Ok(output);
@@ -142,7 +142,7 @@ impl Aes256KeyWrap {
             .zip(aiv.iter())
             .fold(0, |acc, (a, b)| acc | (a ^ b));
         if c != 0 {
-            return Err(KeywrapError::AuthenticationFailed);
+            return Err(KeywrapError::IntegrityCheckFailed);
         }
         Ok(output)
     }

@@ -101,6 +101,7 @@ fn main() -> ! {
 }
 
 fn run_fake_root_keys() -> ! {
+    log::set_max_level(log::LevelFilter::Trace);
     let xns = xous_names::XousNames::new().unwrap();
     /*
        Connections allowed to the keys server:
@@ -116,6 +117,12 @@ fn run_fake_root_keys() -> ! {
 
     let mut keys = RootKeys::new();
     log::info!("Boot FPGA key source: {:?}", keys.fpga_key_source());
+
+    keys.set_ux_password_type(Some(PasswordType::Boot));
+    let default_password = "a";
+    println!(">>> Using return password: \"{}\"", default_password);
+    keys.hash_and_save_password(default_password);
+    keys.update_policy(Some(PasswordRetentionPolicy::EraseOnSuspend));
 
     // Register a fake SoC token. This is required in order to allow the spinor server
     // to write to flash.
@@ -179,36 +186,7 @@ fn run_fake_root_keys() -> ! {
             // UX flow opcodes
             Opcode::UxTryInitKeys => unimplemented!(),
             Opcode::UxInitBootPasswordReturn => {
-                // // assume:
-                // //   - setup_key_init has also been called (exactly once, before anything happens)
-                // //   - set_ux_password_type has been called already
-                // let mut buf =
-                //     unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                // let plaintext_pw = buf
-                //     .to_original::<gam::modal::TextEntryPayloads, _>()
-                //     .unwrap();
-
-                // keys.hash_and_save_password(plaintext_pw.first().as_str());
-                // plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
-                // buf.volatile_clear();
-
-                // keys.set_ux_password_type(Some(PasswordType::Update));
-                // // pop up our private password dialog box
-                // password_action
-                //     .set_action_opcode(Opcode::UxInitUpdatePasswordReturn.to_u32().unwrap());
-                // rootkeys_modal.modify(
-                //     Some(ActionType::TextEntry(password_action.clone())),
-                //     Some(t!("rootkeys.updatepass", xous::LANG)),
-                //     false,
-                //     None,
-                //     true,
-                //     None,
-                // );
-                // #[cfg(feature = "tts")]
-                // tts.tts_blocking(t!("rootkeys.updatepass", xous::LANG))
-                //     .unwrap();
-                // log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
-                // rootkeys_modal.activate();
+                unimplemented!()
             }
             Opcode::InitBootPassword => {
                 // Only operate on memory messages
@@ -236,68 +214,7 @@ fn run_fake_root_keys() -> ! {
                 keys.update_policy(Some(PasswordRetentionPolicy::EraseOnSuspend));
             }
             Opcode::UxInitUpdatePasswordReturn => {
-                // let mut buf =
-                //     unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                // let plaintext_pw = buf
-                //     .to_original::<gam::modal::TextEntryPayloads, _>()
-                //     .unwrap();
-
-                // keys.hash_and_save_password(plaintext_pw.first().as_str());
-                // plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
-                // buf.volatile_clear();
-
-                // keys.set_ux_password_type(None);
-
-                // // this routine will update the rootkeys_modal with the current Ux state
-                // let result = keys.do_key_init(&mut rootkeys_modal, main_cid);
-                // // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
-                // rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
-
-                // log::info!("set_ux_password result: {:?}", result);
-
-                // // clear all the state, re-enable suspend/resume
-                // keys.finish_key_init();
-
-                // match result {
-                //     Ok(_) => {
-                //         log::info!("going to into reboot arc");
-                //         send_message(
-                //             main_cid,
-                //             xous::Message::new_scalar(
-                //                 Opcode::UxTryReboot.to_usize().unwrap(),
-                //                 0,
-                //                 0,
-                //                 0,
-                //                 0,
-                //             ),
-                //         )
-                //         .expect("couldn't initiate dialog box");
-                //     }
-                //     Err(RootkeyResult::AlignmentError) => {
-                //         modals
-                //             .get()
-                //             .show_notification(t!("rootkeys.init.fail_alignment", xous::LANG), None)
-                //             .expect("modals error");
-                //     }
-                //     Err(RootkeyResult::KeyError) => {
-                //         modals
-                //             .get()
-                //             .show_notification(t!("rootkeys.init.fail_key", xous::LANG), None)
-                //             .expect("modals error");
-                //     }
-                //     Err(RootkeyResult::IntegrityError) => {
-                //         modals
-                //             .get()
-                //             .show_notification(t!("rootkeys.init.fail_verify", xous::LANG), None)
-                //             .expect("modals error");
-                //     }
-                //     Err(RootkeyResult::FlashError) => {
-                //         modals
-                //             .get()
-                //             .show_notification(t!("rootkeys.init.fail_burn", xous::LANG), None)
-                //             .expect("modals error");
-                //     }
-                // }
+                unimplemented!()
             }
             Opcode::UxTryReboot => {
                 unimplemented!()
@@ -309,22 +226,7 @@ fn run_fake_root_keys() -> ! {
                 unimplemented!()
             }
             Opcode::UxUpdateGwPasswordReturn => {
-                // let mut buf =
-                //     unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                // let plaintext_pw = buf
-                //     .to_original::<gam::modal::TextEntryPayloads, _>()
-                //     .unwrap();
-
-                // keys.hash_and_save_password(plaintext_pw.first().as_str());
-                // plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
-                // buf.volatile_clear();
-                // // indicate that there should be no change to the policy
-                // let payload =
-                //     gam::RadioButtonPayload::new(t!("rootkeys.policy_suspend", xous::LANG));
-                // let buf = Buffer::into_buf(payload).expect("couldn't convert message to payload");
-                // buf.send(main_cid, Opcode::UxUpdateGwRun.to_u32().unwrap())
-                //     .map(|_| ())
-                //     .expect("couldn't send action message");
+                unimplemented!()
             }
             Opcode::UxUpdateGwRun => {
                 unimplemented!()
@@ -389,85 +291,13 @@ fn run_fake_root_keys() -> ! {
                 })
             }
             Opcode::UxAesPasswordPolicy => {
-                // // this is bypassed, it's not useful. You basically always only want to retain the password until sleep.
-                // let mut buf =
-                //     unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                // let plaintext_pw = buf
-                //     .to_original::<gam::modal::TextEntryPayloads, _>()
-                //     .unwrap();
-
-                // keys.hash_and_save_password(plaintext_pw.first().as_str());
-                // plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
-                // buf.volatile_clear();
-
-                // let mut confirm_radiobox = gam::modal::RadioButtons::new(
-                //     main_cid,
-                //     Opcode::UxAesEnsureReturn.to_u32().unwrap(),
-                // );
-                // confirm_radiobox.is_password = true;
-                // confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_suspend", xous::LANG)));
-                // // confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_clear", xous::LANG))); // this policy makes no sense in the use case of the key
-                // confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_keep", xous::LANG)));
-                // rootkeys_modal.modify(
-                //     Some(ActionType::RadioButtons(confirm_radiobox)),
-                //     Some(t!("rootkeys.policy_request", xous::LANG)),
-                //     false,
-                //     None,
-                //     true,
-                //     None,
-                // );
-                // #[cfg(feature = "tts")]
-                // tts.tts_blocking(t!("rootkeys.policy_request", xous::LANG))
-                //     .unwrap();
-                // rootkeys_modal.activate();
+                unimplemented!()
             }
             Opcode::UxAesEnsureReturn => {
-                // if let Some(sender) = aes_sender.take() {
-                //     xous::return_scalar(sender, 1).unwrap();
-                //     {
-                //         let mut buf = unsafe {
-                //             Buffer::from_memory_message(msg.body.memory_message().unwrap())
-                //         };
-                //         let plaintext_pw = buf
-                //             .to_original::<gam::modal::TextEntryPayloads, _>()
-                //             .unwrap();
-                //         keys.hash_and_save_password(plaintext_pw.first().as_str());
-                //         plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
-                //         buf.volatile_clear();
-
-                //         // this is a reasonable default policy -- don't bother the user to answer this question all the time.
-                //         keys.update_policy(Some(PasswordRetentionPolicy::EraseOnSuspend));
-                //     }
-
-                //     keys.set_ux_password_type(None);
-                // } else {
-                //     xous::return_scalar(msg.sender, 0).unwrap();
-                //     log::warn!("UxAesEnsureReturn detected a fat-finger event. Ignoring.");
-                // }
+                unimplemented!()
             }
             Opcode::AesOracle => {
-                // let mut buffer = unsafe {
-                //     Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                // };
-                // // as_flat saves a copy step, but we have to deserialize some enums manually
-                // let mut aes_op = buffer.to_original::<AesOp, _>().unwrap();
-                // let op = match aes_op.aes_op {
-                //     // seems stupid, but we have to do this because we want to have zeroize on the AesOp record, and it means we can't have Copy on this.
-                //     AesOpType::Decrypt => AesOpType::Decrypt,
-                //     AesOpType::Encrypt => AesOpType::Encrypt,
-                // };
-                // // deserialize the specifier
-                // match aes_op.block {
-                //     AesBlockType::SingleBlock(mut b) => {
-                //         keys.aes_op(aes_op.key_index, op, &mut b);
-                //         aes_op.block = AesBlockType::SingleBlock(b);
-                //     }
-                //     AesBlockType::ParBlock(mut pb) => {
-                //         keys.aes_par_op(aes_op.key_index, op, &mut pb);
-                //         aes_op.block = AesBlockType::ParBlock(pb);
-                //     }
-                // };
-                // buffer.replace(aes_op).unwrap();
+                unimplemented!()
             }
             Opcode::AesKwp => {
                 let mut buffer = unsafe {
@@ -476,7 +306,6 @@ fn run_fake_root_keys() -> ! {
                     )
                 };
                 let mut kwp = buffer.to_original::<KeyWrapper, _>().unwrap();
-                // println!("kwp: {:?}", kwp);
                 keys.kwp_op(&mut kwp);
                 buffer.replace(kwp).unwrap();
             }

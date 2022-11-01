@@ -70,7 +70,7 @@ pub(crate) enum Opcode {
     Quit = 33,
 
     /// Initialize the root password without involving Ux
-    InitBootPassword = 34,
+    InitBootPassword = 340,
 
     /// Invalid
     InvalidOpcode = usize::MAX,
@@ -157,16 +157,14 @@ impl AesOp {
     Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize, Eq, PartialEq, Copy, Clone,
 )]
 pub enum KeywrapError {
-    /// Input is too big.
-    TooBig = 0,
-    /// Input is too small.
-    TooSmall = 1,
-    /// Ciphertext has invalid padding.
-    Unpadded = 2,
-    /// The ciphertext is not valid for the expected length.
-    InvalidExpectedLen = 3,
-    /// The ciphertext couldn't be authenticated.
-    AuthenticationFailed = 4,
+    InvalidDataSize,
+    InvalidKekSize,
+    InvalidOutputSize,
+    IntegrityCheckFailed,
+    /// this is a bodge to return an error code that upgrades from a faulty early version of AES-KWP
+    /// only works for 256-bit keys, but that is also all we used.
+    /// The return tuple is: (unwrapped key, correctly wrapped key)
+    UpgradeToNew(([u8; 32], [u8; 40])),
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize, Eq, PartialEq)]
 pub enum KeyWrapOp {
@@ -181,11 +179,11 @@ use std::fmt;
 impl fmt::Display for KeywrapError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            KeywrapError::TooBig => f.write_str("Input too big"),
-            KeywrapError::TooSmall => f.write_str("Input too small"),
-            KeywrapError::Unpadded => f.write_str("Padding error"),
-            KeywrapError::InvalidExpectedLen => f.write_str("Invalid expected lengthr"),
-            KeywrapError::AuthenticationFailed => f.write_str("Authentication failed"),
+            KeywrapError::InvalidDataSize => f.write_str("Input too big"),
+            KeywrapError::InvalidKekSize => f.write_str("Input too small"),
+            KeywrapError::InvalidOutputSize => f.write_str("Padding error"),
+            KeywrapError::IntegrityCheckFailed => f.write_str("Invalid expected lengthr"),
+            KeywrapError::UpgradeToNew(_) => f.write_str("Authentication failed"),
         }
     }
 }
@@ -193,6 +191,7 @@ impl fmt::Display for KeywrapError {
 pub(crate) const MAX_WRAP_DATA: usize = 2048;
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize)]
 #[zeroize(drop)]
+#[repr(C)]
 pub(crate) struct KeyWrapper {
     pub data: [u8; MAX_WRAP_DATA + 8],
     // used to specify the length of the data used in the fixed-length array above

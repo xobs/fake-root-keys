@@ -206,20 +206,20 @@ impl<'a> RootKeys {
         let mut key = match kwp.key_index {
             KeyRomLocs::USER_KEY => {
                 let mut key_enc = self.read_key_256(KeyRomLocs::USER_KEY);
-                let pcache: &PasswordCache =
-                    unsafe { &*(self.pass_cache.as_ptr() as *const PasswordCache) };
+                let pcache: &PasswordCache = unsafe{& *(self.pass_cache.as_ptr() as *const PasswordCache)};
                 if pcache.hashed_boot_pw_valid == 0 {
                     self.purge_password(PasswordType::Boot);
                     log::warn!("boot password isn't valid! Returning bogus results.");
                 }
-                for (key, &pw) in key_enc.iter_mut().zip(pcache.hashed_boot_pw.iter()) {
+                for (key, &pw) in
+                key_enc.iter_mut().zip(pcache.hashed_boot_pw.iter()) {
                     *key = *key ^ pw;
                 }
                 if self.boot_password_policy == PasswordRetentionPolicy::AlwaysPurge {
                     self.purge_password(PasswordType::Boot);
                 }
                 key_enc
-            }
+            },
             _ => {
                 self.fake_key[0] = kwp.key_index;
                 self.fake_key
@@ -230,10 +230,12 @@ impl<'a> RootKeys {
         self.compute_key_rollback(&mut key);
         #[cfg(feature = "hazardous-debug")]
         log::debug!("root user key (anti-rollback): {:x?}", key);
-        let keywrapper = Aes256KeyWrap::new(&key);
+        use aes_kw::Kek;
+        use aes_kw::KekAes256;
+        let keywrapper: KekAes256 = Kek::from(key);
         match kwp.op {
             KeyWrapOp::Wrap => {
-                match keywrapper.encapsulate(&kwp.data[..kwp.len as usize]) {
+                match keywrapper.wrap_with_padding_vec(&kwp.data[..kwp.len as usize]) {
                     Ok(wrapped) => {
                         for (&src, dst) in wrapped.iter().zip(kwp.data.iter_mut()) {
                             *dst = src;
@@ -244,23 +246,70 @@ impl<'a> RootKeys {
                         kwp.expected_len = wrapped.len() as u32;
                     }
                     Err(e) => {
-                        kwp.result = Some(e);
+                        kwp.result = Some(match e {
+                            aes_kw::Error::IntegrityCheckFailed => KeywrapError::IntegrityCheckFailed,
+                            aes_kw::Error::InvalidDataSize => KeywrapError::InvalidDataSize,
+                            aes_kw::Error::InvalidKekSize { size } => {
+                                log::info!("invalid size {}", size); // weird. can't name this _size
+                                KeywrapError::InvalidKekSize
+                            },
+                            aes_kw::Error::InvalidOutputSize { expected } => {
+                                log::info!("invalid output size {}", expected);
+                                KeywrapError::InvalidOutputSize
+                            },
+                        });
                     }
                 }
             }
             KeyWrapOp::Unwrap => {
-                match keywrapper
-                    .decapsulate(&kwp.data[..kwp.len as usize], kwp.expected_len as usize)
-                {
-                    Ok(unwrapped) => {
-                        for (&src, dst) in unwrapped.iter().zip(kwp.data.iter_mut()) {
+                match keywrapper.unwrap_with_padding_vec(&kwp.data[..kwp.len as usize]) {
+                    Ok(wrapped) => {
+                        for (&src, dst) in wrapped.iter().zip(kwp.data.iter_mut()) {
                             *dst = src;
                         }
-                        kwp.len = unwrapped.len() as u32;
+                        kwp.len = wrapped.len() as u32;
                         kwp.result = None;
+                        // this is an un-used field but...why not?
+                        kwp.expected_len = wrapped.len() as u32;
                     }
                     Err(e) => {
-                        kwp.result = Some(e);
+                        kwp.result = Some(match e {
+                            aes_kw::Error::IntegrityCheckFailed => {
+                                // try the legacy version, if it unwraps, send back the key + an error that indicates the caller needs to update their version
+                                let legacy_kw = Aes256KeyWrap::new(&key);
+                                match legacy_kw.decapsulate(&kwp.data[..kwp.len as usize], kwp.expected_len as usize) {
+                                    Ok(unwrapped) => {
+                                        for (&src, dst) in unwrapped.iter().zip(kwp.data.iter_mut()) {
+                                            *dst = src;
+                                        }
+                                        kwp.len = unwrapped.len() as u32;
+                                        // hand the caller back a new version of the wrapped key that meets NIST specs.
+                                        let corrected = keywrapper.wrap_with_padding_vec(&unwrapped).expect("couldn't convert to correct version of AES keywrapping");
+                                        let mut upgrade = [0u8; 40];
+                                        assert!(corrected.len() == 40, "Correctly wrapped key has a different length than the legacy wrapped key");
+                                        upgrade.copy_from_slice(&corrected);
+
+                                        let mut unwrapped_key = [0u8; 32];
+                                        assert!(kwp.len == 32, "Unwrapped key from legacy version of algorithm has the wrong length");
+                                        unwrapped_key.copy_from_slice(&unwrapped);
+                                        log::warn!("Keywrap from incorrect version of algorithm; sending message to correct the problem");
+                                        KeywrapError::UpgradeToNew((unwrapped_key, upgrade))
+                                    }
+                                    Err(e) => {
+                                        e
+                                    }
+                                }
+                            },
+                            aes_kw::Error::InvalidDataSize => KeywrapError::InvalidDataSize,
+                            aes_kw::Error::InvalidKekSize { size } => {
+                                log::info!("invalid size {}", size); // weird. can't name this _size
+                                KeywrapError::InvalidKekSize
+                            },
+                            aes_kw::Error::InvalidOutputSize { expected } => {
+                                log::info!("invalid output size {}", expected);
+                                KeywrapError::InvalidOutputSize
+                            },
+                        });
                     }
                 }
             }
@@ -359,6 +408,8 @@ impl<'a> RootKeys {
         // but it disallows guessing all the passwords with a single off-the-shelf hashcat run.
         salt[0] ^= pw_type as u8;
 
+        // !!!!!!! bcrypt cost: 7 time: 421ms  hashed_password: [32, 142, 60, 156, 30, 145, 54, 203, 238, 77, 174, 91, 145, 13, 176, 15, 9, 101, 194, 192, 146, 36, 9, 240]
+        //    on: bcrypt cost: 7 time: 3664ms  hashed_password: [32, 142, 60, 156, 30, 145, 54, 203, 238, 77, 174, 91, 145, 13, 176, 15, 9, 101, 194, 192, 146, 36, 9, 240] (src\implementation.rs:367)
         // the bcrypt function takes the plaintext password and makes one copy to prime the blowfish bcrypt
         // cipher. It is responsible for erasing this state.
         let start_time = std::time::Instant::now();
