@@ -5,6 +5,7 @@ version = 3
 [[package]]
 name = "aes"
 version = "0.8.1"
+source = "git+https://github.com/betrusted-io/xous-core.git?rev=ebc0739beeb5e01215d6eebede8068101d0daa0a#ebc0739beeb5e01215d6eebede8068101d0daa0a"
 dependencies = [
  "cipher 0.4.3",
  "hex-literal",
